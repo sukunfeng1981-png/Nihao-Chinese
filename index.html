@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>汉语口语聊天室 - 多角色版</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        @font-face {
+            font-family: 'CN-Handwriting';
+            src: url('fonts/cn-YSHaoShenTi.woff2') format('woff2');
+            font-display: swap; 
+        }
+        @font-face {
+            font-family: 'TH-Handwriting';
+            src: url('fonts/th-MaliThin-Regular.ttf') format('truetype');
+            font-display: swap;
+        }
+
+        :root {
+            --line-bg: #8cabd9; 
+            --my-bubble: #85e05d; 
+            --other-bubble: #ffffff; 
+            --read-color: #4e5d72;
+            --header-bg: rgba(140, 171, 217, 0.9);
+        }
+
+        body {
+            margin: 0; padding: 0; background-color: var(--line-bg);
+            font-family: 'CN-Handwriting', 'TH-Handwriting', -apple-system, sans-serif;
+            display: flex; justify-content: center; min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -webkit-tap-highlight-color: transparent;
+            overflow-x: hidden;
+        }
+
+        body.locked-mode { pointer-events: none; }
+
+        .phone-container { width: 100%; max-width: 500px; display: flex; flex-direction: column; }
+
+        header {
+            padding: calc(env(safe-area-inset-top) + 15px) 20px 15px;
+            position: sticky; top: 0;
+            background: var(--header-bg);
+            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            z-index: 1000;
+            border-bottom: 0.5px solid rgba(0,0,0,0.08);
+            display: flex; flex-direction: column; gap: 12px;
+        }
+
+        .top-bar { display: flex; justify-content: space-between; align-items: center; }
+        
+        .lang-switch-btn {
+            background: rgba(44, 62, 80, 0.9); color: #fff; border: none;
+            padding: 8px 18px; border-radius: 25px; font-size: 14px; 
+            font-weight: 500; cursor: pointer;
+        }
+
+        .score-board { 
+            background: rgba(255,255,255,0.25); color: #fff; 
+            padding: 4px 14px; border-radius: 20px; font-size: 13px;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .progress-container {
+            width: 100%; height: 5px; background: rgba(0,0,0,0.1);
+            border-radius: 10px; overflow: hidden;
+        }
+        
+        .progress-bar {
+            width: 0%; height: 100%; background: var(--my-bubble);
+            box-shadow: 0 0 10px rgba(133, 224, 93, 0.4);
+            transition: width 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .sentence-list { padding: 20px 12px 120px; display: flex; flex-direction: column; }
+
+        .message-row {
+            display: flex; margin-bottom: 22px; align-items: flex-start;
+            opacity: 0; transform: translateY(15px);
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        @keyframes fadeIn { to { opacity: 1; transform: translateY(0); } }
+
+        /* 侧边逻辑保持不变 */
+        .message-row.left { align-self: flex-start; flex-direction: row; }
+        .message-row.right { align-self: flex-end; flex-direction: row-reverse; }
+
+        .user-meta { display: flex; flex-direction: column; align-items: center; margin: 0 10px; flex-shrink: 0; }
+        
+        .avatar {
+            width: 44px; height: 44px; border-radius: 16px;
+            background-size: cover; background-position: center;
+            background-color: #f0f0f0;
+            margin-bottom: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .nickname { font-size: 11px; color: rgba(255,255,255,0.9); font-weight: bold; }
+
+        .bubble-and-status { display: flex; align-items: flex-end; max-width: 78%; }
+        .left .bubble-and-status { flex-direction: row; }
+        .right .bubble-and-status { flex-direction: row-reverse; }
+
+        .bubble {
+            padding: 12px 16px; border-radius: 18px;
+            font-size: 18px; line-height: 1.5;
+            cursor: pointer; position: relative;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .left .bubble { background-color: var(--other-bubble); color: #000; border-top-left-radius: 4px; }
+        .right .bubble { background-color: var(--my-bubble); color: #000; border-top-right-radius: 4px; }
+
+        .playing-now .bubble { transform: scale(0.95); filter: brightness(0.9); }
+
+        .status-mark {
+            font-size: 10px; color: #4e5d72;
+            margin: 0 6px 4px; opacity: 0;
+            transition: opacity 0.4s ease;
+            white-space: nowrap; font-weight: bold;
+        }
+        .has-learned .status-mark { opacity: 1; }
+
+        .zh-text { display: none; font-size: 19px; font-weight: 500; }
+        .th-text { display: block; font-size: 17px; }
+
+        .footer-deco { padding: 40px; text-align: center; color: #fff; opacity: 0.5; font-size: 12px; letter-spacing: 1px; }
+    </style>
+</head>
+<body id="mainBody">
+
+    <div class="phone-container">
+        <header>
+            <div class="top-bar">
+                <button class="lang-switch-btn" id="langBtn">中 / ไทย</button>
+                <div class="score-board">进度 <span id="currentCount">0</span> / <span id="totalCount">0</span></div>
+            </div>
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+        </header>
+        
+        <div class="sentence-list" id="list"></div>
+        <div class="footer-deco">— 汉语口语实验室 —</div>
+    </div>
+
+    <script>
+        // 定义默认值，防止数组里漏写属性
+        const DEFAULTS = {
+            teacher: { name: "张老师", avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=Teacher" },
+            student: { name: "小明", avatar: "https://api.dicebear.com/7.x/adventurer/svg?seed=Student" }
+        };
+
+        const sentences = [
+            { id: 1, side: 'left', name: "王老师", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix", th: "สวัสดี", zh: "你好，" },
+            { id: 2, side: 'right', name: "我", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Anita", th: "สบายดีไหม", zh: "你好吗？" },
+            { id: 3, side: 'left', name: "王老师", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix", th: "สบายดี", zh: "我很好，" },
+            { id: 4, side: 'right', name: "我", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Anita", th: "ฉันก็สบายดี", zh: "我也很好，" },
+            { id: 5, side: 'left', name: "校工", avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=Guard", th: "อรุณสวัสดิ์", zh: "你早，" },
+            { id: 6, side: 'right', name: "我", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Anita", th: "คุณสุขภาพดีไหม", zh: "你身体好吗？" },
+            { id: 7, side: 'left', name: "王老师", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix", th: "ขอบคุณ", zh: "谢谢，" },
+            { id: 8, side: 'right', name: "我", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Anita", th: "ไปก่อนนะแล้วพบกันใหม่", zh: "再见，" },
+            { id: 9, side: 'left', name: "张老师", avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=Teacher", th: "คุณงานยุ่งไหม", zh: "你工作忙吗？" },
+            { id: 10, side: 'right', name: "我", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Anita", th: "ยุ่งมาก แล้วคุณล่ะ", zh: "很忙，你呢？" }
+        ];
+
+        let learnedSentences = new Set();
+        let isAudioPlaying = false; 
+        let isChineseMode = false;
+
+        const mainAudio = new Audio();
+        const scoreAudio = new Audio('audio/yinxiao-ding.mp3');
+
+        const ui = {
+            list: document.getElementById('list'),
+            currentCount: document.getElementById('currentCount'),
+            totalCount: document.getElementById('totalCount'),
+            progress: document.getElementById('progressBar'),
+            langBtn: document.getElementById('langBtn'),
+            body: document.body
+        };
+
+        async function init() {
+            if (window.liff) { try { await liff.init({ liffId: "2009077149-TmSHxUzU" }); } catch (e) {} }
+            ui.totalCount.textContent = sentences.length;
+            renderList();
+            ui.langBtn.onclick = toggleLanguage;
+            updateScore(false);
+        }
+
+        function renderList() {
+            sentences.forEach((s, index) => {
+                const side = s.side || 'left';
+                
+                // 确定头像和昵称：如果s对象里没有，就按左右侧分配默认值
+                const currentName = s.name || (side === 'left' ? DEFAULTS.teacher.name : DEFAULTS.student.name);
+                const currentAvatar = s.avatar || (side === 'left' ? DEFAULTS.teacher.avatar : DEFAULTS.student.avatar);
+
+                const row = document.createElement('div');
+                row.className = `message-row ${side}`;
+                row.style.animationDelay = `${index * 0.04}s`; 
+                
+                row.innerHTML = `
+                    <div class="user-meta">
+                        <div class="avatar" style="background-image: url('${currentAvatar}')"></div>
+                        <div class="nickname">${currentName}</div>
+                    </div>
+                    <div class="bubble-and-status">
+                        <div class="bubble">
+                            <div class="zh-text">${s.zh}</div>
+                            <div class="th-text">${s.th}</div>
+                        </div>
+                        <div class="status-mark">已读 ✔</div>
+                    </div>
+                `;
+                
+                row.onclick = () => handlePlay(s, row);
+                ui.list.appendChild(row);
+            });
+        }
+
+        function toggleLanguage() {
+            if (isAudioPlaying) return;
+            isChineseMode = !isChineseMode;
+            document.querySelectorAll('.zh-text').forEach(el => el.style.display = isChineseMode ? 'block' : 'none');
+            document.querySelectorAll('.th-text').forEach(el => el.style.display = isChineseMode ? 'none' : 'block');
+        }
+
+        function updateScore(playDing = true) {
+            const current = learnedSentences.size;
+            const total = sentences.length;
+            ui.currentCount.textContent = current;
+            ui.progress.style.width = `${(current / total) * 100}%`;
+            if (playDing) { scoreAudio.currentTime = 0; scoreAudio.play().catch(()=>{}); }
+        }
+
+        function handlePlay(s, element) {
+            if (isAudioPlaying) return;
+            if (navigator.vibrate) navigator.vibrate(10);
+
+            isAudioPlaying = true;
+            ui.body.classList.add('locked-mode');
+            element.classList.add('playing-now');
+
+            mainAudio.src = `audio/${s.id}.mp3`;
+
+            mainAudio.onplay = () => {
+                mainAudio.volume = 0;
+                let v = 0;
+                const fade = setInterval(() => {
+                    v += 0.25;
+                    if (v >= 1) { mainAudio.volume = 1; clearInterval(fade); }
+                    else mainAudio.volume = v;
+                }, 30);
+            };
+
+            mainAudio.onended = () => {
+                isAudioPlaying = false;
+                ui.body.classList.remove('locked-mode');
+                element.classList.remove('playing-now');
+                
+                const wasLearned = learnedSentences.has(s.id);
+                element.classList.add('has-learned');
+                
+                if (!wasLearned) {
+                    learnedSentences.add(s.id);
+                    updateScore(true);
+                }
+            };
+            
+            mainAudio.onerror = mainAudio.onended;
+            mainAudio.play().catch(mainAudio.onended);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
