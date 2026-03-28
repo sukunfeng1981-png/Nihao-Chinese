@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>汉语口语聊天室</title>
+    
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
     <style>
         @font-face { font-family: 'CN-Handwriting'; src: url('fonts/cn-YSHaoShenTi.woff2') format('woff2'); font-display: swap; }
         @font-face { font-family: 'TH-Handwriting'; src: url('fonts/th-MaliThin-Regular.ttf') format('truetype'); font-display: swap; }
@@ -117,7 +120,6 @@
             { id: "30", side: 'left', ...ROLES.bb, zh: "这是我的书包。", th: "นี่คือกระเป๋านักเรียนของฉัน" },
             { id: "31", side: 'right', ...ROLES.nn, zh: "那是什么？", th: "นั่นคืออะไร" },
             { id: "32", side: 'left', ...ROLES.bb, zh: "那是我妹妹的帽子。", th: "นั่นคือหมวกของน้องสาวฉัน" }
-
         ];
 
         let learnedSentences = new Set(), isAudioPlaying = false, isChineseGlobal = false, totalCount = 0;
@@ -131,11 +133,24 @@
             langBtn: document.getElementById('langBtn')
         };
 
-        // 核心辅助：将 ID 转换为安全格式或排序格式
         const getSafeId = (id) => String(id).replace(/[.-]/g, '_');
         const getSortVal = (id) => parseFloat(String(id).replace('-', '.'));
 
-        function init() {
+        // --- 核心修改：LIFF 初始化 ---
+        async function init() {
+            try {
+                // 1. 初始化 LIFF 模块
+                await liff.init({ liffId: "2009077149-N5kd2OBe" });
+                
+                // 2. 检查登录状态
+                if (!liff.isLoggedIn() && liff.isInClient()) {
+                    liff.login();
+                }
+            } catch (err) {
+                console.error("LIFF 启动失败:", err);
+            }
+
+            // 3. 原有的初始化逻辑
             rawData.sort((a, b) => getSortVal(a.id) - getSortVal(b.id));
             totalCount = rawData.filter(s => !/[a-zA-Z]/.test(String(s.id))).length;
             ui.totalCount.textContent = totalCount;
